@@ -1,0 +1,79 @@
+#!/usr/bin/env ruby
+
+class YankRing
+  DEFAULT_HISTORY_DIR  = ENV['HOME']
+  DEFAULT_HISTORY_FILE = 'yankring_history_v2.txt'
+  MAX_ELEMENT_LENGTH   = 2 ** 20
+  HISTORY_NEWLINE      = "\002"
+  FILE_BINARY          = File::BINARY rescue 0
+
+  def initialize(path)
+    @path = path
+  end
+
+  def [](index)
+    raise Error unless File.file?(@path)
+
+    open(@path, 'rb') do |f|
+      f.flock(File::LOCK_SH)
+      index.times { f.readline }
+      decode(f.readline)
+    end
+  rescue EOFError
+    raise Error
+  end
+
+  def first
+    self[0]
+  end
+
+  def insert(index, data)
+    line = encode(data)
+
+    open(@path, File::RDWR | File::CREAT | FILE_BINARY) do |f|
+      f.flock(File::LOCK_EX)
+      lines = f.readlines
+      next if line == lines[index]
+      lines.insert([index, lines.length].min, line)
+      f.rewind
+      f.write(lines.join)
+    end
+  end
+
+  def unshift(data)
+    insert(0, data)
+  end
+
+  private
+    def decode(line)
+      line.sub(/,[^,]*\z/, '').tr(HISTORY_NEWLINE, "\n")
+    end
+
+    def encode(data)
+      line  = MAX_ELEMENT_LENGTH == 0 ? data.dup : data[0, MAX_ELEMENT_LENGTH]
+      multi = line.gsub!("\r\n", HISTORY_NEWLINE)
+      multi = line.tr!("\n\r", HISTORY_NEWLINE) || multi
+      line << (multi ? ",V\n" : ",v\n")
+    end
+
+  class Error < StandardError; end
+end
+
+
+if $0 == __FILE__
+  begin
+    yankring = YankRing.new(File.join(
+      ENV['VIM_YANKRING_HISTORY_DIR']  || YankRing::DEFAULT_HISTORY_DIR,
+      ENV['VIM_YANKRING_HISTORY_FILE'] || YankRing::DEFAULT_HISTORY_FILE
+    ))
+
+    if ARGV.empty? && $stdin.tty?
+      print yankring.first
+    else
+      yankring.unshift(ARGF.read)
+    end
+
+  rescue YankRing::Error
+    exit 1
+  end
+end

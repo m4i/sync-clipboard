@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<job><script language="JScript"><![CDATA[
+
+var args = WScript.Arguments;
+
+if (!(args.length >= 3 &&
+      /^(get|put)$/.test(args(0)) &&
+      new ActiveXObject('Scripting.FileSystemObject').FileExists(args(1)))) {
+    WScript.Echo([
+        'Usage:',
+        '  ' + WScript.ScriptName + ' get <plink path> <plink options>',
+        '  ' + WScript.ScriptName + ' put <plink path> <plink options>',
+    ].join('\n'));
+    WScript.Quit();
+}
+
+var command = "'" + args(1).replace(/\\/g, '/') + "'";
+for (var i = 2; i < args.length; i++) {
+    command += ' ' + args(i);
+}
+
+if (args(0) == 'get') {
+    command += ' -t vim-yankring | nkf -Ws -Lw -x | putclip';
+} else {
+    command = 'getclip | nkf -Sw -Lu -x | ' + command + ' vim-yankring';
+}
+
+command  = 'sh -c "' + command + '"';
+WScript.CreateObject('WScript.Shell').Run(command, 0, true);
+
+]]></script></job>
